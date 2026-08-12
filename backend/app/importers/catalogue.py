@@ -3,7 +3,9 @@
 import argparse
 import csv
 import re
+import tempfile
 import unicodedata
+import urllib.request
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -277,15 +279,33 @@ def import_csv(path: Path, session: Session) -> ImportRun:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("csv_file", type=Path)
+    parser.add_argument("csv_file", nargs="?", type=Path)
+    parser.add_argument(
+        "--sheet",
+        action="store_true",
+        help="Download and import the configured Google Sheet CSV export",
+    )
     args = parser.parse_args()
+    if args.sheet:
+        with tempfile.TemporaryDirectory() as directory:
+            csv_file = Path(directory) / "catalogue.csv"
+            urllib.request.urlretrieve(SHEET_URL, csv_file)  # noqa: S310
+            run_import(csv_file)
+        return
+    if args.csv_file is None:
+        parser.error("provide a CSV file or use --sheet")
     if not args.csv_file.exists():
         parser.error(f"File does not exist: {args.csv_file}")
+    run_import(args.csv_file)
+
+
+def run_import(csv_file: Path) -> None:
     with SessionLocal() as session:
-        run = import_csv(args.csv_file, session)
-        print(
-            f"Import complete: {run.inserted} inserted, {run.updated} updated, {run.skipped} skipped, {run.warnings} warnings"
-        )
+        run = import_csv(csv_file, session)
+    print(
+        f"Import complete: {run.inserted} inserted, {run.updated} updated, "
+        f"{run.skipped} skipped, {run.warnings} warnings"
+    )
 
 
 if __name__ == "__main__":

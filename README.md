@@ -56,6 +56,13 @@ uv run python -m app.importers.catalogue ../data/catalogue.csv
 
 The importer is idempotent using normalized manufacturer and article number as product identity. It retains every source row in `import_rows`, records missing identifiers as warnings, converts Swedish decimal values, interprets `UTGÅTT` as discontinued, and separates repeated vehicle fitments from products.
 
+It can also download the configured Google Sheet directly, which is useful for containerized deployments:
+
+```bash
+cd backend
+uv run python -m app.importers.catalogue --sheet
+```
+
 Known limitation: vehicle labels in the source are free text. Makes and year ranges are extracted conservatively while the original label is always preserved. They should be curated through the future admin interface before driving strict ecommerce compatibility rules.
 
 ## API
@@ -125,6 +132,6 @@ ghcr.io/jaglyserx/bilen-frontend
 
 Published images receive `latest`, branch, semantic-version, and immutable `sha-…` tags as applicable. Deploy using a version or SHA tag rather than `latest` when reproducibility matters.
 
-The frontend API URL is embedded at build time. Set the GitHub repository variable `VITE_API_URL` under **Settings → Secrets and variables → Actions → Variables** before publishing a production frontend. If unset, it defaults to `http://localhost:8000/api/v1`.
+The frontend defaults to the same-origin `/api/v1` endpoint. Nginx proxies that path to the API in local Docker, while Kubernetes routes it directly at the ingress. This makes one frontend image portable across environments. Set the optional GitHub repository variable `VITE_API_URL` only when the API intentionally lives on a different origin.
 
 No registry secret is required: the workflow publishes with GitHub's scoped `GITHUB_TOKEN`. If the packages should be publicly pullable, change their visibility in the repository owner's **Packages** settings after the first publication.
