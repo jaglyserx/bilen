@@ -2,7 +2,7 @@ FROM ghcr.io/astral-sh/uv:0.11.25 AS uv
 
 FROM python:3.13-slim
 WORKDIR /app
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_CACHE_DIR=/tmp/uv-cache
 COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock alembic.ini ./
 RUN uv sync --locked --no-dev --no-install-project
