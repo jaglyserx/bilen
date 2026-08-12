@@ -113,3 +113,18 @@ Hooks intentionally check formatting without rewriting staged files. Apply fixes
 - Back up PostgreSQL and test restores.
 - Add authentication before implementing product writes or import uploads.
 - Store future product images in object storage rather than PostgreSQL.
+
+## CI and container images
+
+GitHub Actions runs backend and frontend quality checks and builds both Docker images for pull requests. Pushes to `main`, version tags such as `v1.0.0`, and manually dispatched runs publish to GitHub Container Registry:
+
+```text
+ghcr.io/jaglyserx/bilen-backend
+ghcr.io/jaglyserx/bilen-frontend
+```
+
+Published images receive `latest`, branch, semantic-version, and immutable `sha-…` tags as applicable. Deploy using a version or SHA tag rather than `latest` when reproducibility matters.
+
+The frontend API URL is embedded at build time. Set the GitHub repository variable `VITE_API_URL` under **Settings → Secrets and variables → Actions → Variables** before publishing a production frontend. If unset, it defaults to `http://localhost:8000/api/v1`.
+
+No registry secret is required: the workflow publishes with GitHub's scoped `GITHUB_TOKEN`. If the packages should be publicly pullable, change their visibility in the repository owner's **Packages** settings after the first publication.
