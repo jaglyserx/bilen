@@ -100,6 +100,14 @@ make import-workshops
 
 The import is idempotent by workbook tab and source row. Workshops are available at `/workshops` after importing.
 
+The backend container image includes the workbook at `/imports/lager.xlsx`, so a
+deployed Kubernetes API pod can import it without copying files into the pod:
+
+```bash
+kubectl exec -n bilen deployment/api -- \
+  uv run --no-sync python -m app.importers.workshops /imports/lager.xlsx
+```
+
 Example:
 
 ```text

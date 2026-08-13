@@ -16,7 +16,9 @@ services:
       retries: 10
 
   api:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       DATABASE_URL: postgresql+psycopg://bilen:bilen@db:5432/bilen
       CORS_ORIGINS: http://localhost:5173

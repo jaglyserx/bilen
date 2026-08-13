@@ -89,11 +89,13 @@ jobs:
       matrix:
         include:
           - name: backend
-            context: ./backend
+            context: .
+            dockerfile: ./backend/Dockerfile
             image: ghcr.io/${{ github.repository }}-backend
             build_args: ""
           - name: frontend
             context: ./frontend
+            dockerfile: ./frontend/Dockerfile
             image: ghcr.io/${{ github.repository }}-frontend
             build_args: VITE_API_URL=${{ vars.VITE_API_URL || '/api/v1' }}
 
@@ -133,6 +135,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
