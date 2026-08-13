@@ -23,6 +23,7 @@ from app.models import (
     Price,
     Product,
     ProductFitment,
+    ProductIdentifier,
     ProductLink,
     Vehicle,
 )
@@ -185,6 +186,14 @@ def import_csv(path: Path, session: Session) -> ImportRun:
                     defaults={"article_number": article_number},
                 )
                 product.article_number = article_number
+                identifier, _ = first_or_create(
+                    session,
+                    ProductIdentifier,
+                    kind="article_number",
+                    normalized_value=normalize(article_number),
+                    defaults={"product_id": product.id, "value": article_number},
+                )
+                identifier.value = article_number
                 product.name = clean(values[26]) or product.name
                 product.towbar_type = clean(values[7]) or product.towbar_type
                 product.description = clean(values[8]) or product.description

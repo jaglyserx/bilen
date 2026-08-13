@@ -90,6 +90,23 @@ class Product(Base):
     categories: Mapped[list["Category"]] = relationship(
         secondary=product_categories, back_populates="products"
     )
+    identifiers: Mapped[list["ProductIdentifier"]] = relationship(
+        back_populates="product", cascade="all, delete-orphan"
+    )
+    order_items: Mapped[list["OrderItem"]] = relationship(back_populates="product")
+
+
+class ProductIdentifier(Base):
+    __tablename__ = "product_identifiers"
+    __table_args__ = (UniqueConstraint("kind", "normalized_value"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
+    product_id: Mapped[str] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(30), default="article_number")
+    value: Mapped[str] = mapped_column(String(200))
+    normalized_value: Mapped[str] = mapped_column(String(200), index=True)
+    product: Mapped[Product] = relationship(back_populates="identifiers")
 
 
 class Vehicle(Base):
@@ -200,3 +217,70 @@ class ImportRow(Base):
     status: Mapped[str] = mapped_column(String(30))
     message: Mapped[str | None] = mapped_column(Text)
     raw_data: Mapped[dict] = mapped_column(json_type)
+
+
+class Customer(Base):
+    __tablename__ = "customers"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
+    name: Mapped[str] = mapped_column(String(500), index=True)
+    email: Mapped[str | None] = mapped_column(String(320), index=True)
+    phone: Mapped[str | None] = mapped_column(String(100))
+    delivery_address: Mapped[str | None] = mapped_column(Text)
+    postal_code: Mapped[str | None] = mapped_column(String(30))
+    city: Mapped[str | None] = mapped_column(String(200))
+    orders: Mapped[list["Order"]] = relationship(back_populates="customer")
+
+
+class Order(Base):
+    __tablename__ = "orders"
+    __table_args__ = (UniqueConstraint("source", "external_id"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
+    source: Mapped[str] = mapped_column(String(50), default="google_sheet")
+    external_id: Mapped[str] = mapped_column(String(100), index=True)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), index=True)
+    ordered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    status: Mapped[str] = mapped_column(String(30), index=True)
+    workflow_status: Mapped[str | None] = mapped_column(String(500))
+    sales_person: Mapped[str | None] = mapped_column(String(100), index=True)
+    sales_channel: Mapped[str | None] = mapped_column(String(100), index=True)
+    total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    currency: Mapped[str] = mapped_column(String(3), default="SEK")
+    payment_method: Mapped[str | None] = mapped_column(String(200))
+    vehicle_label: Mapped[str | None] = mapped_column(Text)
+    vehicle_year: Mapped[str | None] = mapped_column(Text)
+    registration_number: Mapped[str | None] = mapped_column(Text, index=True)
+    shipping_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    tracking_number: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
+    source_sheet: Mapped[str] = mapped_column(String(100))
+    source_row: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+    customer: Mapped[Customer] = relationship(back_populates="orders")
+    items: Mapped[list["OrderItem"]] = relationship(
+        back_populates="order", cascade="all, delete-orphan"
+    )
+
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+    __table_args__ = (UniqueConstraint("order_id", "position"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
+    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), index=True)
+    product_id: Mapped[str | None] = mapped_column(
+        ForeignKey("products.id", ondelete="SET NULL"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(30))
+    source_sku: Mapped[str | None] = mapped_column(String(500), index=True)
+    description: Mapped[str] = mapped_column(Text)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    link_status: Mapped[str] = mapped_column(String(30), default="unmatched", index=True)
+    order: Mapped[Order] = relationship(back_populates="items")
+    product: Mapped[Product | None] = relationship(back_populates="order_items")

@@ -12,3 +12,7 @@ export type Product = {
 }
 export type ProductPage = { items: Product[]; page: number; page_size: number; total: number; pages: number }
 export type Filters = { manufacturers: string[]; towbar_types: string[]; vehicle_makes: string[]; statuses: string[] }
+export type OrderItem = { id: string; kind: string; source_sku: string | null; description: string; quantity: number; link_status: string; product: { id: string; article_number: string; name: string | null } | null }
+export type Order = { id: string; external_id: string; ordered_at: string | null; status: string; workflow_status: string | null; sales_person: string | null; sales_channel: string | null; total_amount: string | null; currency: string; vehicle_label: string | null; registration_number: string | null; customer: { id: string; name: string; email: string | null; phone: string | null; city: string | null }; items: OrderItem[] }
+export type OrderPage = { items: Order[]; page: number; page_size: number; total: number; pages: number }
+export type OrderSummary = { total: number; by_status: Record<string, number>; unmatched_items: number }

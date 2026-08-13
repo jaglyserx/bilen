@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
@@ -98,3 +99,61 @@ class FilterOptions(BaseModel):
     towbar_types: list[str]
     vehicle_makes: list[str]
     statuses: list[str]
+
+
+class CustomerOut(BaseModel):
+    id: str
+    name: str
+    email: str | None
+    phone: str | None
+    city: str | None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrderProductOut(BaseModel):
+    id: str
+    article_number: str
+    name: str | None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrderItemOut(BaseModel):
+    id: str
+    kind: str
+    source_sku: str | None
+    description: str
+    quantity: int
+    link_status: str
+    product: OrderProductOut | None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrderOut(BaseModel):
+    id: str
+    external_id: str
+    ordered_at: datetime | None
+    status: str
+    workflow_status: str | None
+    sales_person: str | None
+    sales_channel: str | None
+    total_amount: Decimal | None
+    currency: str
+    vehicle_label: str | None
+    registration_number: str | None
+    customer: CustomerOut
+    items: list[OrderItemOut]
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrderPage(BaseModel):
+    items: list[OrderOut]
+    page: int
+    page_size: int
+    total: int
+    pages: int
+
+
+class OrderSummary(BaseModel):
+    total: int
+    by_status: dict[str, int]
+    unmatched_items: int
