@@ -1,4 +1,4 @@
-.PHONY: dev db migrate import import-orders test lint typecheck check hooks
+.PHONY: dev db migrate import import-orders import-workshops test lint typecheck check hooks
 
 dev:
 	docker compose up --build
@@ -14,6 +14,9 @@ import:
 
 import-orders:
 	cd backend && uv run python -m app.importers.orders --download
+
+import-workshops:
+	cd backend && uv run python -m app.importers.workshops ../lager.xlsx
 
 test:
 	cd backend && uv run pytest

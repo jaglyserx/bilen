@@ -1,4 +1,4 @@
-import type { Filters, Order, OrderPage, OrderSummary, Product, ProductPage } from './types'
+import type { Filters, Order, OrderPage, OrderSummary, Product, ProductPage, Workshop, WorkshopPage } from './types'
 
 const API_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
@@ -14,3 +14,5 @@ export function getFilters() { return request<Filters>('/filters') }
 export function getOrders(params: URLSearchParams) { return request<OrderPage>(`/orders?${params}`) }
 export function getOrder(id: string) { return request<Order>(`/orders/${id}`) }
 export function getOrderSummary() { return request<OrderSummary>('/orders/summary') }
+export function getWorkshops(params: URLSearchParams) { return request<WorkshopPage>(`/workshops?${params}`) }
+export function getWorkshop(id: string) { return request<Workshop>(`/workshops/${id}`) }

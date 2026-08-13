@@ -5,8 +5,26 @@ from sqlalchemy import case, distinct, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.models import Customer, Manufacturer, Order, OrderItem, Product, ProductFitment, Vehicle
-from app.schemas import FilterOptions, OrderOut, OrderPage, OrderSummary, Page, ProductDetail
+from app.models import (
+    Customer,
+    Manufacturer,
+    Order,
+    OrderItem,
+    Product,
+    ProductFitment,
+    Vehicle,
+    Workshop,
+)
+from app.schemas import (
+    FilterOptions,
+    OrderOut,
+    OrderPage,
+    OrderSummary,
+    Page,
+    ProductDetail,
+    WorkshopOut,
+    WorkshopPage,
+)
 
 router = APIRouter(prefix="/api/v1")
 
@@ -197,3 +215,50 @@ def get_order(order_id: str, db: Session = Depends(get_db)) -> Order:
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     return order
+
+
+@router.get("/workshops", response_model=WorkshopPage)
+def list_workshops(
+    q: str | None = None,
+    city: str | None = None,
+    active: bool | None = True,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> WorkshopPage:
+    stmt = select(Workshop)
+    if q:
+        pattern = f"%{q.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Workshop.name.ilike(pattern),
+                Workshop.city.ilike(pattern),
+                Workshop.postal_code.ilike(pattern),
+                Workshop.contact_person.ilike(pattern),
+            )
+        )
+    if city:
+        stmt = stmt.where(func.lower(Workshop.city) == city.casefold().strip())
+    if active is not None:
+        stmt = stmt.where(Workshop.is_active == active)
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    items = db.scalars(
+        stmt.order_by(Workshop.city.asc().nullslast(), Workshop.name.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return WorkshopPage(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        pages=math.ceil(total / page_size) if total else 0,
+    )
+
+
+@router.get("/workshops/{workshop_id}", response_model=WorkshopOut)
+def get_workshop(workshop_id: str, db: Session = Depends(get_db)) -> Workshop:
+    workshop = db.get(Workshop, workshop_id)
+    if not workshop:
+        raise HTTPException(status_code=404, detail="Workshop not found")
+    return workshop

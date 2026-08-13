@@ -74,6 +74,8 @@ Known limitation: vehicle labels in the source are free text. Makes and year ran
 - `GET /api/v1/orders` — search, filter, and paginate orders
 - `GET /api/v1/orders/summary` — workflow totals and unmatched-item count
 - `GET /api/v1/orders/{id}` — order, customer, and explicitly linked product lines
+- `GET /api/v1/workshops` — search and paginate collaborating workshops
+- `GET /api/v1/workshops/{id}` — workshop contact and operational details
 
 ## Importing orders
 
@@ -86,6 +88,17 @@ uv run python -m app.importers.orders --download --sheet 2024
 ```
 
 Or run `make import-orders`. The import is idempotent by source and external order number. Product links are resolved only through exact, unique values in `product_identifiers`; names are never searched or regex-matched. The migration safely backfills globally unique catalogue article numbers. Missing or ambiguous article numbers remain unlinked and are surfaced in the order UI for later mapping.
+
+## Importing workshops
+
+Import the `Våra Verkstäder` tab from the local `lager.xlsx` workbook:
+
+```bash
+make migrate
+make import-workshops
+```
+
+The import is idempotent by workbook tab and source row. Workshops are available at `/workshops` after importing.
 
 Example:
 

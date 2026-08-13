@@ -24,6 +24,7 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/data:ro
+      - ./lager.xlsx:/imports/lager.xlsx:ro
     depends_on:
       db:
         condition: service_healthy

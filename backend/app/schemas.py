@@ -157,3 +157,35 @@ class OrderSummary(BaseModel):
     total: int
     by_status: dict[str, int]
     unmatched_items: int
+
+
+class WorkshopOut(BaseModel):
+    id: str
+    name: str
+    contact_person: str | None
+    address: str | None
+    postal_code: str | None
+    city: str | None
+    phone: str | None
+    email: str | None
+    booking_instructions: str | None
+    agreement_terms: str | None
+    workshop_info: str | None
+    discount_terms: str | None
+    internal_owner: str | None
+    written_agreement: bool | None
+    terms_updated_at: datetime | None
+    current_info: str | None
+    is_active: bool
+    restrictions: str | None
+    supports_motorhomes: bool | None
+    loan_car_available: bool | None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkshopPage(BaseModel):
+    items: list[WorkshopOut]
+    page: int
+    page_size: int
+    total: int
+    pages: int
