@@ -1,14 +1,18 @@
 import math
+import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, distinct, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
+from app.importers.catalogue import normalize
 from app.models import (
     Customer,
     Manufacturer,
     Order,
+    OrderEvent,
     OrderItem,
     Product,
     ProductFitment,
@@ -17,6 +21,7 @@ from app.models import (
 )
 from app.schemas import (
     FilterOptions,
+    OrderCreate,
     OrderOut,
     OrderPage,
     OrderSummary,
@@ -49,6 +54,7 @@ def health(db: Session = Depends(get_db)) -> dict[str, str]:
 @router.get("/products", response_model=Page)
 def list_products(
     q: str | None = None,
+    vehicle: str | None = None,
     manufacturer: str | None = None,
     towbar_type: str | None = None,
     vehicle_make: str | None = None,
@@ -59,7 +65,7 @@ def list_products(
     db: Session = Depends(get_db),
 ) -> Page:
     stmt = select(Product).join(Product.manufacturer)
-    if q or vehicle_make:
+    if q or vehicle or vehicle_make:
         stmt = stmt.outerjoin(Product.fitments).outerjoin(ProductFitment.vehicle)
     if q:
         pattern = f"%{q.strip()}%"
@@ -82,6 +88,16 @@ def list_products(
         stmt = stmt.where(Product.towbar_type == towbar_type)
     if vehicle_make:
         stmt = stmt.where(func.lower(Vehicle.make) == vehicle_make.casefold())
+    if vehicle:
+        vehicle_pattern = f"%{vehicle.strip()}%"
+        normalized_vehicle_pattern = f"%{normalize(vehicle)}%"
+        stmt = stmt.where(
+            or_(
+                Vehicle.source_label.ilike(vehicle_pattern),
+                Vehicle.model.ilike(vehicle_pattern),
+                Vehicle.normalized_label.ilike(normalized_vehicle_pattern),
+            )
+        )
     if status:
         stmt = stmt.where(Product.status == status)
     count_stmt = select(func.count()).select_from(stmt.distinct().subquery())
@@ -135,7 +151,11 @@ def filters(db: Session = Depends(get_db)) -> FilterOptions:
 
 
 def order_options():
-    return selectinload(Order.customer), selectinload(Order.items).selectinload(OrderItem.product)
+    return (
+        selectinload(Order.customer),
+        selectinload(Order.workshop),
+        selectinload(Order.items).selectinload(OrderItem.product),
+    )
 
 
 @router.get("/orders", response_model=OrderPage)
@@ -209,6 +229,70 @@ def order_summary(db: Session = Depends(get_db)) -> OrderSummary:
     )
 
 
+@router.post("/orders", response_model=OrderOut, status_code=201)
+def create_order(data: OrderCreate, db: Session = Depends(get_db)) -> Order:
+    workshop = db.get(Workshop, data.workshop_id)
+    if not workshop or not workshop.is_active:
+        raise HTTPException(status_code=422, detail="Choose an active workshop")
+    product_ids = list(dict.fromkeys(item.product_id for item in data.items))
+    products = {
+        product.id: product
+        for product in db.scalars(select(Product).where(Product.id.in_(product_ids))).all()
+    }
+    missing = [product_id for product_id in product_ids if product_id not in products]
+    if missing:
+        raise HTTPException(status_code=422, detail={"unknown_product_ids": missing})
+
+    now = datetime.now(UTC)
+    customer = Customer(**data.customer.model_dump())
+    order = Order(
+        source="crm",
+        external_id=f"CRM-{now:%Y%m%d}-{uuid.uuid4().hex[:8].upper()}",
+        customer=customer,
+        workshop=workshop,
+        ordered_at=now,
+        status="in_progress",
+        workflow_status="Ny order",
+        sales_channel="crm",
+        registration_number=data.registration_number,
+        vehicle_label=data.vehicle_label,
+        vehicle_year=data.vehicle_year,
+        notes=data.notes,
+        sales_person=data.sales_person,
+        source_sheet="crm",
+        source_row=0,
+    )
+    for position, item in enumerate(data.items, start=1):
+        product = products[item.product_id]
+        order.items.append(
+            OrderItem(
+                position=position,
+                kind="product",
+                product=product,
+                source_sku=product.article_number,
+                description=product.name or product.article_number,
+                quantity=item.quantity,
+                link_status="linked",
+            )
+        )
+    order.events.append(
+        OrderEvent(
+            event_type="order.created",
+            payload={
+                "schema_version": 1,
+                "workshop_id": workshop.id,
+                "product_ids": [item.product_id for item in data.items],
+            },
+        )
+    )
+    db.add(order)
+    db.commit()
+    created = db.scalar(select(Order).where(Order.id == order.id).options(*order_options()))
+    if created is None:  # pragma: no cover - guarded by the successful transaction above
+        raise HTTPException(status_code=500, detail="Created order could not be loaded")
+    return created
+
+
 @router.get("/orders/{order_id}", response_model=OrderOut)
 def get_order(order_id: str, db: Session = Depends(get_db)) -> Order:
     order = db.scalar(select(Order).where(Order.id == order_id).options(*order_options()))
@@ -221,6 +305,7 @@ def get_order(order_id: str, db: Session = Depends(get_db)) -> Order:
 def list_workshops(
     q: str | None = None,
     city: str | None = None,
+    postal_prefix: str | None = Query(default=None, min_length=2, max_length=3),
     active: bool | None = True,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -239,6 +324,11 @@ def list_workshops(
         )
     if city:
         stmt = stmt.where(func.lower(Workshop.city) == city.casefold().strip())
+    if postal_prefix:
+        normalized_prefix = "".join(character for character in postal_prefix if character.isdigit())
+        if len(normalized_prefix) < 2:
+            raise HTTPException(status_code=422, detail="Postal prefix must contain two digits")
+        stmt = stmt.where(func.replace(Workshop.postal_code, " ", "").like(f"{normalized_prefix}%"))
     if active is not None:
         stmt = stmt.where(Workshop.is_active == active)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0

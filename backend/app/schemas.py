@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ManufacturerOut(BaseModel):
@@ -128,6 +128,13 @@ class OrderItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class WorkshopSummaryOut(BaseModel):
+    id: str
+    name: str
+    city: str | None
+    model_config = ConfigDict(from_attributes=True)
+
+
 class OrderOut(BaseModel):
     id: str
     external_id: str
@@ -141,6 +148,7 @@ class OrderOut(BaseModel):
     vehicle_label: str | None
     registration_number: str | None
     customer: CustomerOut
+    workshop: WorkshopSummaryOut | None
     items: list[OrderItemOut]
     model_config = ConfigDict(from_attributes=True)
 
@@ -157,6 +165,31 @@ class OrderSummary(BaseModel):
     total: int
     by_status: dict[str, int]
     unmatched_items: int
+
+
+class CustomerCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=500)
+    email: str | None = Field(default=None, max_length=320)
+    phone: str | None = Field(default=None, max_length=100)
+    delivery_address: str | None = None
+    postal_code: str | None = Field(default=None, max_length=30)
+    city: str | None = Field(default=None, max_length=200)
+
+
+class OrderItemCreate(BaseModel):
+    product_id: str
+    quantity: int = Field(default=1, ge=1, le=100)
+
+
+class OrderCreate(BaseModel):
+    customer: CustomerCreate
+    workshop_id: str
+    items: list[OrderItemCreate] = Field(min_length=1, max_length=100)
+    registration_number: str | None = None
+    vehicle_label: str | None = None
+    vehicle_year: str | None = None
+    notes: str | None = None
+    sales_person: str | None = Field(default=None, max_length=100)
 
 
 class WorkshopOut(BaseModel):

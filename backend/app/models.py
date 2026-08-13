@@ -238,6 +238,9 @@ class Order(Base):
     source: Mapped[str] = mapped_column(String(50), default="google_sheet")
     external_id: Mapped[str] = mapped_column(String(100), index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), index=True)
+    workshop_id: Mapped[str | None] = mapped_column(
+        ForeignKey("workshops.id", ondelete="SET NULL"), index=True
+    )
     ordered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     status: Mapped[str] = mapped_column(String(30), index=True)
     workflow_status: Mapped[str | None] = mapped_column(String(500))
@@ -263,7 +266,11 @@ class Order(Base):
         onupdate=lambda: datetime.now(UTC),
     )
     customer: Mapped[Customer] = relationship(back_populates="orders")
+    workshop: Mapped["Workshop | None"] = relationship(back_populates="orders")
     items: Mapped[list["OrderItem"]] = relationship(
+        back_populates="order", cascade="all, delete-orphan"
+    )
+    events: Mapped[list["OrderEvent"]] = relationship(
         back_populates="order", cascade="all, delete-orphan"
     )
 
@@ -284,6 +291,21 @@ class OrderItem(Base):
     link_status: Mapped[str] = mapped_column(String(30), default="unmatched", index=True)
     order: Mapped[Order] = relationship(back_populates="items")
     product: Mapped[Product | None] = relationship(back_populates="order_items")
+
+
+class OrderEvent(Base):
+    """Transactional event/outbox used by future integration workers."""
+
+    __tablename__ = "order_events"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
+    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), index=True)
+    event_type: Mapped[str] = mapped_column(String(100), index=True)
+    payload: Mapped[dict] = mapped_column(json_type, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    order: Mapped[Order] = relationship(back_populates="events")
 
 
 class Workshop(Base):
@@ -322,3 +344,4 @@ class Workshop(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
+    orders: Mapped[list[Order]] = relationship(back_populates="workshop")
