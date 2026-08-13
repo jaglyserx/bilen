@@ -26,14 +26,14 @@ repo = "local"
 id = "ruff-check"
 name = "ruff check"
 language = "system"
-entry = "uv run --project backend ruff check --config backend/pyproject.toml"
+entry = "uv run --no-sync --project backend ruff check --fix --config backend/pyproject.toml"
 types = ["python"]
 
 [[repos.hooks]]
 id = "ruff-format"
 name = "ruff format"
 language = "system"
-entry = "uv run --project backend ruff format --check --config backend/pyproject.toml"
+entry = "uv run --no-sync --project backend ruff format --config backend/pyproject.toml"
 types = ["python"]
 
 [[repos.hooks]]

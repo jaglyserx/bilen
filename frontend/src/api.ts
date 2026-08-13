@@ -15,5 +15,6 @@ export function getOrders(params: URLSearchParams) { return request<OrderPage>(`
 export function getOrder(id: string) { return request<Order>(`/orders/${id}`) }
 export function getOrderSummary() { return request<OrderSummary>('/orders/summary') }
 export function createOrder(order: OrderCreate) { return request<Order>('/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(order) }) }
+export function confirmOrder(id: string) { return request<Order>(`/orders/${id}/confirm`, { method: 'POST' }) }
 export function getWorkshops(params: URLSearchParams) { return request<WorkshopPage>(`/workshops?${params}`) }
 export function getWorkshop(id: string) { return request<Workshop>(`/workshops/${id}`) }

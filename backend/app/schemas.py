@@ -139,6 +139,7 @@ class OrderOut(BaseModel):
     id: str
     external_id: str
     ordered_at: datetime | None
+    confirmed_at: datetime | None
     status: str
     workflow_status: str | None
     sales_person: str | None
@@ -169,7 +170,7 @@ class OrderSummary(BaseModel):
 
 class CustomerCreate(BaseModel):
     name: str = Field(min_length=1, max_length=500)
-    email: str | None = Field(default=None, max_length=320)
+    email: str = Field(min_length=3, max_length=320)
     phone: str | None = Field(default=None, max_length=100)
     delivery_address: str | None = None
     postal_code: str | None = Field(default=None, max_length=30)

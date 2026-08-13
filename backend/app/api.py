@@ -181,12 +181,13 @@ def list_orders(
         stmt = stmt.where(Order.status == status)
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     status_priority = case(
-        (Order.status == "attention", 0),
-        (Order.status == "backorder", 1),
-        (Order.status == "in_progress", 2),
-        (Order.status == "completed", 3),
-        (Order.status == "cancelled", 4),
-        else_=2,
+        (Order.status == "draft", 0),
+        (Order.status == "attention", 1),
+        (Order.status == "backorder", 2),
+        (Order.status == "in_progress", 3),
+        (Order.status == "completed", 4),
+        (Order.status == "cancelled", 5),
+        else_=3,
     )
     items = (
         db.scalars(
@@ -231,8 +232,8 @@ def order_summary(db: Session = Depends(get_db)) -> OrderSummary:
 
 @router.post("/orders", response_model=OrderOut, status_code=201)
 def create_order(data: OrderCreate, db: Session = Depends(get_db)) -> Order:
-    workshop = db.get(Workshop, data.workshop_id)
-    if not workshop or not workshop.is_active:
+    workshop = db.get(Workshop, data.workshop_id) if data.workshop_id else None
+    if data.workshop_id and (not workshop or not workshop.is_active):
         raise HTTPException(status_code=422, detail="Choose an active workshop")
     product_ids = list(dict.fromkeys(item.product_id for item in data.items))
     products = {
@@ -250,9 +251,8 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)) -> Order:
         external_id=f"CRM-{now:%Y%m%d}-{uuid.uuid4().hex[:8].upper()}",
         customer=customer,
         workshop=workshop,
-        ordered_at=now,
-        status="in_progress",
-        workflow_status="Ny order",
+        status="draft",
+        workflow_status="Offert",
         sales_channel="crm",
         registration_number=data.registration_number,
         vehicle_label=data.vehicle_label,
@@ -277,20 +277,75 @@ def create_order(data: OrderCreate, db: Session = Depends(get_db)) -> Order:
         )
     order.events.append(
         OrderEvent(
-            event_type="order.created",
+            event_type="offer.created",
             payload={
                 "schema_version": 1,
-                "workshop_id": workshop.id,
+                "workshop_id": workshop.id if workshop else None,
                 "product_ids": [item.product_id for item in data.items],
             },
         )
     )
+    if customer.email:
+        order.events.append(
+            OrderEvent(
+                event_type="customer.offer_email.requested",
+                payload={"schema_version": 1, "customer_email": customer.email},
+            )
+        )
     db.add(order)
     db.commit()
     created = db.scalar(select(Order).where(Order.id == order.id).options(*order_options()))
     if created is None:  # pragma: no cover - guarded by the successful transaction above
         raise HTTPException(status_code=500, detail="Created order could not be loaded")
     return created
+
+
+@router.post("/orders/{order_id}/confirm", response_model=OrderOut)
+def confirm_order(order_id: str, db: Session = Depends(get_db)) -> Order:
+    order = db.scalar(select(Order).where(Order.id == order_id).options(*order_options()))
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.status != "draft":
+        raise HTTPException(status_code=409, detail="Only draft offers can be confirmed")
+    if not order.customer.email:
+        raise HTTPException(
+            status_code=422, detail="Customer email is required to confirm an offer"
+        )
+    if not order.workshop or not order.workshop.is_active:
+        raise HTTPException(
+            status_code=422, detail="An active workshop is required to confirm an offer"
+        )
+    if not order.items:
+        raise HTTPException(status_code=422, detail="At least one product is required")
+
+    now = datetime.now(UTC)
+    order.status = "in_progress"
+    order.workflow_status = "Bekräftad order"
+    order.ordered_at = now
+    order.confirmed_at = now
+    common_payload = {
+        "schema_version": 1,
+        "customer_id": order.customer.id,
+        "workshop_id": order.workshop.id,
+    }
+    order.events.extend(
+        [
+            OrderEvent(event_type="order.confirmed", payload=common_payload),
+            OrderEvent(
+                event_type="workshop.order_confirmation_email.requested",
+                payload={**common_payload, "workshop_email": order.workshop.email},
+            ),
+            OrderEvent(
+                event_type="customer.payment_link.requested",
+                payload={**common_payload, "customer_email": order.customer.email},
+            ),
+        ]
+    )
+    db.commit()
+    confirmed = db.scalar(select(Order).where(Order.id == order.id).options(*order_options()))
+    if confirmed is None:  # pragma: no cover
+        raise HTTPException(status_code=500, detail="Confirmed order could not be loaded")
+    return confirmed
 
 
 @router.get("/orders/{order_id}", response_model=OrderOut)

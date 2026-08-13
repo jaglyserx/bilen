@@ -242,6 +242,7 @@ class Order(Base):
         ForeignKey("workshops.id", ondelete="SET NULL"), index=True
     )
     ordered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     status: Mapped[str] = mapped_column(String(30), index=True)
     workflow_status: Mapped[str | None] = mapped_column(String(500))
     sales_person: Mapped[str | None] = mapped_column(String(100), index=True)

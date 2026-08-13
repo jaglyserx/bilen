@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { getOrders, getOrderSummary } from '../api'
 
 const statuses = [
+  ['draft', 'Offert'],
   ['in_progress', 'Pågående'],
   ['backorder', 'Restorder'],
   ['attention', 'Behöver hjälp'],
@@ -40,7 +41,7 @@ export function OrdersPage() {
   const updatePage = (value: number) => updateUrl({ page: value > 1 ? String(value) : null })
 
   return <section className="orders-page">
-    <div className="orders-head"><div><p className="eyebrow">CRM · Orderöversikt</p><h1>Orderflöde</h1><p>Följ ordern från beställning till leverans och se vilka artiklar som är kopplade till katalogen.</p><Link className="primary create-order-link" to="/orders/new">+ Skapa ny order</Link></div><div className="summary"><strong>{summary.data?.total ?? '—'}</strong><span>ordrar totalt</span><strong>{summary.data?.unmatched_items ?? '—'}</strong><span>olänkade orderrader</span></div></div>
+    <div className="orders-head"><div><p className="eyebrow">CRM · Orderöversikt</p><h1>Orderflöde</h1><p>Följ offerter och beställningar från första förslag till leverans.</p><Link className="primary create-order-link" to="/orders/new">+ Skapa ny offert</Link></div><div className="summary"><strong>{summary.data?.total ?? '—'}</strong><span>offerter & ordrar</span><strong>{summary.data?.unmatched_items ?? '—'}</strong><span>olänkade orderrader</span></div></div>
     <div className="order-toolbar"><label className="order-search">⌕<input value={search} onChange={(event) => updateSearch(event.target.value)} placeholder="Sök ordernummer, kund, e-post eller registreringsnummer" /></label><select value={status} onChange={(event) => updateStatus(event.target.value)}><option value="">Alla statusar</option>{statuses.map(([value, label]) => <option key={value} value={value}>{label} ({summary.data?.by_status[value] ?? 0})</option>)}</select></div>
     {orders.isLoading && <div className="state">Hämtar orderflödet…</div>}
     {orders.isError && <div className="state error">Orderflödet kunde inte hämtas.</div>}

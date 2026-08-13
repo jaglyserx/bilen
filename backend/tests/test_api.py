@@ -40,6 +40,7 @@ def test_orders_sort_open_statuses_before_done_then_by_newest(client, session):
     session.flush()
     for external_id, status, day in (
         ("completed-newest", "completed", 4),
+        ("draft", "draft", 6),
         ("open-older", "in_progress", 2),
         ("open-newer", "in_progress", 3),
         ("attention", "attention", 1),
@@ -62,6 +63,7 @@ def test_orders_sort_open_statuses_before_done_then_by_newest(client, session):
 
     assert response.status_code == 200
     assert [order["external_id"] for order in response.json()["items"]] == [
+        "draft",
         "attention",
         "open-newer",
         "open-older",
@@ -70,7 +72,7 @@ def test_orders_sort_open_statuses_before_done_then_by_newest(client, session):
     ]
 
 
-def test_create_order_links_products_workshop_and_emits_event(client, session):
+def test_offer_can_be_saved_then_confirmed_as_an_order(client, session):
     manufacturer = Manufacturer(name="Tillverkare", normalized_name="tillverkare")
     product = Product(
         manufacturer=manufacturer,
@@ -101,12 +103,51 @@ def test_create_order_links_products_workshop_and_emits_event(client, session):
 
     assert response.status_code == 201
     result = response.json()
+    assert result["status"] == "draft"
+    assert result["ordered_at"] is None
     assert result["workshop"]["id"] == workshop.id
     assert result["items"][0]["product"]["id"] == product.id
     assert result["items"][0]["quantity"] == 2
-    event = session.query(OrderEvent).one()
-    assert event.event_type == "order.created"
-    assert event.payload["schema_version"] == 1
+    assert {event.event_type for event in session.query(OrderEvent).all()} == {
+        "offer.created",
+        "customer.offer_email.requested",
+    }
+
+    confirmation = client.post(f"/api/v1/orders/{result['id']}/confirm")
+
+    assert confirmation.status_code == 200
+    confirmed = confirmation.json()
+    assert confirmed["status"] == "in_progress"
+    assert confirmed["ordered_at"] is not None
+    assert confirmed["confirmed_at"] is not None
+    assert {event.event_type for event in session.query(OrderEvent).all()} == {
+        "offer.created",
+        "customer.offer_email.requested",
+        "order.confirmed",
+        "workshop.order_confirmation_email.requested",
+        "customer.payment_link.requested",
+    }
+
+    assert client.post(f"/api/v1/orders/{result['id']}/confirm").status_code == 409
+
+
+def test_offer_requires_customer_email_and_workshop(client, session):
+    manufacturer = Manufacturer(name="Tillverkare", normalized_name="tillverkare")
+    product = Product(
+        manufacturer=manufacturer,
+        article_number="SKU-DRAFT",
+        normalized_article_number="skudraft",
+        name="Dragkrok",
+    )
+    session.add(product)
+    session.commit()
+
+    response = client.post(
+        "/api/v1/orders",
+        json={"customer": {"name": "Ada"}, "items": [{"product_id": product.id}]},
+    )
+
+    assert response.status_code == 422
 
 
 def test_products_can_be_filtered_by_explicit_vehicle_fitment(client, session):

@@ -89,6 +89,13 @@ uv run python -m app.importers.orders --download --sheet 2024
 
 Or run `make import-orders`. The import is idempotent by source and external order number. Product links are resolved only through exact, unique values in `product_identifiers`; names are never searched or regex-matched. The migration safely backfills globally unique catalogue article numbers. Missing or ambiguous article numbers remain unlinked and are surfaced in the order UI for later mapping.
 
+New CRM orders begin as offers with status `draft`. Saving an offer records an
+`offer.created` event and requests the future customer-offer email integration.
+`POST /api/v1/orders/{id}/confirm` confirms a draft exactly once, changes it to
+`in_progress`, and records outbox events for the workshop confirmation and the
+customer payment link. No email or payment provider is called directly from the
+HTTP request; integration workers can process these durable events later.
+
 ## Importing workshops
 
 Import the `Våra Verkstäder` tab from the local `lager.xlsx` workbook:
@@ -146,7 +153,9 @@ cd backend
 uv run prek run --all-files
 ```
 
-Hooks intentionally check formatting without rewriting staged files. Apply fixes explicitly with `cd backend && uv run ruff format .` and stage the result before committing.
+The Ruff hooks automatically fix safe lint issues (including import ordering) and
+format Python files. If a hook changes files, review and stage those changes, then
+commit again.
 
 ## Production notes
 
