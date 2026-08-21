@@ -6,8 +6,10 @@ from decimal import Decimal
 from sqlalchemy import select
 
 from app.clients.woocommerce import WooCommerceClient, WooOrder
+from app.config import Settings
 from app.importers.woocommerce_orders import import_orders
-from app.models import Manufacturer, Order, Product
+from app.models import IntegrationSyncState, Manufacturer, Order, Product
+from app.workers.woocommerce_sync import INITIAL_LOOKBACK, SYNC_OVERLAP, sync_once
 
 
 def woo_order(**overrides) -> WooOrder:
@@ -60,7 +62,7 @@ class FakeClient:
     def __init__(self, orders):
         self.orders = orders
 
-    def iter_orders(self):
+    def iter_orders(self, *, modified_after=None):
         yield from self.orders
 
 
@@ -87,12 +89,16 @@ def test_client_uses_basic_auth_and_parses_orders(monkeypatch):
     monkeypatch.setattr("app.clients.woocommerce.urlopen", fake_urlopen)
     client = WooCommerceClient("https://shop.example", "ck_test", "cs_test", timeout=12)
 
-    orders, pages = client.get_orders(page=2)
+    modified_after = datetime(2026, 8, 20, 9, 0, tzinfo=UTC)
+    orders, pages = client.get_orders(page=2, modified_after=modified_after)
 
     assert pages == 3
     assert orders[0].id == 812
     assert captured["timeout"] == 12
     assert "page=2" in captured["request"].full_url
+    assert "modified_after=2026-08-20T09%3A00%3A00%2B00%3A00" in captured["request"].full_url
+    assert "orderby=modified" in captured["request"].full_url
+    assert "dates_are_gmt=true" in captured["request"].full_url
     expected = base64.b64encode(b"ck_test:cs_test").decode()
     assert captured["request"].get_header("Authorization") == f"Basic {expected}"
     assert "ck_test" not in captured["request"].full_url
@@ -153,3 +159,37 @@ def test_import_leaves_unknown_product_visible(session):
     item = session.scalars(select(Order)).one().items[0]
     assert item.product is None
     assert item.link_status == "unmatched"
+
+
+def test_background_sync_uses_and_advances_persistent_cursor(session, monkeypatch):
+    requested_after = []
+
+    class BackgroundClient:
+        def __init__(self, *_args):
+            pass
+
+        def iter_orders(self, *, modified_after=None):
+            requested_after.append(modified_after)
+            yield woo_order()
+
+    monkeypatch.setattr("app.workers.woocommerce_sync.WooCommerceClient", BackgroundClient)
+    settings = Settings(
+        woo_url="https://shop.example",
+        woo_key="ck_test",
+        woo_secret="cs_test",
+    )
+    first_run = datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
+    second_run = datetime(2026, 8, 21, 12, 5, tzinfo=UTC)
+
+    assert sync_once(settings, now=first_run, session=session) == (1, 1)
+    assert sync_once(settings, now=second_run, session=session) == (1, 1)
+
+    assert requested_after == [
+        first_run - INITIAL_LOOKBACK,
+        first_run - SYNC_OVERLAP,
+    ]
+    state = session.get(IntegrationSyncState, "woocommerce_orders")
+    assert state is not None
+    assert state.cursor_at.replace(tzinfo=UTC) == second_run
+    assert state.last_imported == 1
+    assert state.last_unmatched == 1

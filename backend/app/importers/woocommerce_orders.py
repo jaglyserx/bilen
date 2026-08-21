@@ -27,7 +27,7 @@ STATUS_MAP = {
 
 
 class OrderSource(Protocol):
-    def iter_orders(self) -> Iterable[WooOrder]: ...
+    def iter_orders(self, *, modified_after: datetime | None = None) -> Iterable[WooOrder]: ...
 
 
 def _utc(value: datetime | None) -> datetime | None:
@@ -157,15 +157,24 @@ def upsert_order(session: Session, source: WooOrder) -> tuple[Order, int]:
     return order, unmatched
 
 
-def import_orders(client: OrderSource, session: Session) -> tuple[int, int]:
+def import_orders(
+    client: OrderSource,
+    session: Session,
+    *,
+    modified_after: datetime | None = None,
+    commit: bool = True,
+) -> tuple[int, int]:
     imported = unmatched = 0
-    for source in client.iter_orders():
+    for source in client.iter_orders(modified_after=modified_after):
         _, order_unmatched = upsert_order(session, source)
         imported += 1
         unmatched += order_unmatched
         if imported % 100 == 0:
             session.flush()
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
     return imported, unmatched
 
 

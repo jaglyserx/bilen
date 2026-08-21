@@ -104,6 +104,12 @@ order ID. It maps customer and delivery details, status, timestamps, payment,
 totals, notes, metadata, and product lines onto the existing order model. Products
 are linked by exact catalogue SKU first, then by a unique WooCommerce product ID.
 
+When all three WooCommerce credentials are configured, the API also starts an
+incremental order sync in the background. It runs immediately on startup and every
+five minutes. The initial sync reads the last 24 hours; later syncs use a persistent
+modification cursor with a small overlap so order status changes are imported
+without rereading the full history.
+
 New CRM orders begin as offers with status `draft`. Saving an offer records an
 `offer.created` event and requests the future customer-offer email integration.
 `POST /api/v1/orders/{id}/confirm` confirms a draft exactly once, changes it to

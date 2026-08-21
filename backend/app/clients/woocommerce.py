@@ -56,6 +56,7 @@ class WooOrder(BaseModel):
     total: Decimal | None = None
     date_created_gmt: datetime | None = None
     date_created: datetime | None = None
+    date_modified_gmt: datetime | None = None
     date_paid_gmt: datetime | None = None
     payment_method: str = ""
     payment_method_title: str = ""
@@ -96,6 +97,7 @@ class WooCommerceClient:
         per_page: int = 100,
         status: str | None = None,
         after: datetime | None = None,
+        modified_after: datetime | None = None,
     ) -> tuple[list[WooOrder], int]:
         """Return one page of orders and the total number of available pages."""
         if page < 1:
@@ -107,6 +109,15 @@ class WooCommerceClient:
             params["status"] = status
         if after:
             params["after"] = after.isoformat()
+        if modified_after:
+            params.update(
+                {
+                    "modified_after": modified_after.isoformat(),
+                    "dates_are_gmt": "true",
+                    "orderby": "modified",
+                    "order": "asc",
+                }
+            )
         payload, headers = self._get("orders", params)
         if not isinstance(payload, list):
             raise WooCommerceError("WooCommerce orders response was not a list")
@@ -125,11 +136,17 @@ class WooCommerceClient:
         *,
         status: str | None = None,
         after: datetime | None = None,
+        modified_after: datetime | None = None,
     ) -> Iterator[WooOrder]:
         """Yield all orders, following WooCommerce pagination."""
         page = 1
         while True:
-            orders, total_pages = self.get_orders(page=page, status=status, after=after)
+            orders, total_pages = self.get_orders(
+                page=page,
+                status=status,
+                after=after,
+                modified_after=modified_after,
+            )
             yield from orders
             if page >= total_pages:
                 return

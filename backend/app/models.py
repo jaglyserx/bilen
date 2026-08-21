@@ -219,6 +219,18 @@ class ImportRow(Base):
     raw_data: Mapped[dict] = mapped_column(json_type)
 
 
+class IntegrationSyncState(Base):
+    """Persistent cursor and observability data for a background integration."""
+
+    __tablename__ = "integration_sync_states"
+    name: Mapped[str] = mapped_column(String(100), primary_key=True)
+    cursor_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_imported: Mapped[int] = mapped_column(Integer, default=0)
+    last_unmatched: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class Customer(Base):
     __tablename__ = "customers"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
