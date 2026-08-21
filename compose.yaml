@@ -22,6 +22,9 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://bilen:bilen@db:5432/bilen
       CORS_ORIGINS: http://localhost:5173
+      WOO_URL: ${WOO_URL:-}
+      WOO_KEY: ${WOO_KEY:-}
+      WOO_SECRET: ${WOO_SECRET:-}
     ports:
       - "8000:8000"
     volumes:

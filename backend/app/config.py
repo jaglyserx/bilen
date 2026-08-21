@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     app_name: str = "Bilen Catalogue API"
     database_url: str = "postgresql+psycopg://bilen:bilen@localhost:5432/bilen"
     cors_origins: str = "http://localhost:5173"
+    woo_url: str | None = None
+    woo_key: str | None = None
+    woo_secret: str | None = None
 
     model_config = SettingsConfigDict(env_file="../.env", extra="ignore")
 

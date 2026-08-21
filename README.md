@@ -89,6 +89,21 @@ uv run python -m app.importers.orders --download --sheet 2024
 
 Or run `make import-orders`. The import is idempotent by source and external order number. Product links are resolved only through exact, unique values in `product_identifiers`; names are never searched or regex-matched. The migration safely backfills globally unique catalogue article numbers. Missing or ambiguous article numbers remain unlinked and are surfaced in the order UI for later mapping.
 
+WooCommerce orders can be fetched through the read-only REST API client using
+`WOO_URL`, `WOO_KEY`, and `WOO_SECRET` from `.env`:
+
+```bash
+cd backend
+uv run python -m app.importers.woocommerce_orders
+```
+
+Or run `make import-woocommerce-orders` from the project root.
+
+The import follows all WooCommerce result pages and is idempotent by WooCommerce
+order ID. It maps customer and delivery details, status, timestamps, payment,
+totals, notes, metadata, and product lines onto the existing order model. Products
+are linked by exact catalogue SKU first, then by a unique WooCommerce product ID.
+
 New CRM orders begin as offers with status `draft`. Saving an offer records an
 `offer.created` event and requests the future customer-offer email integration.
 `POST /api/v1/orders/{id}/confirm` confirms a draft exactly once, changes it to
