@@ -8,8 +8,8 @@ from sqlalchemy import select
 from app.clients.woocommerce import WooCommerceClient, WooOrder
 from app.config import Settings
 from app.importers.woocommerce_orders import import_orders
-from app.models import IntegrationSyncState, Manufacturer, Order, Product
-from app.workers.woocommerce_sync import INITIAL_LOOKBACK, SYNC_OVERLAP, sync_once
+from app.models import Manufacturer, Order, Product
+from app.workers.woocommerce_sync import SYNC_INTERVAL_SECONDS, SYNC_LOOKBACK, sync_once
 
 
 def woo_order(**overrides) -> WooOrder:
@@ -70,7 +70,7 @@ def test_client_uses_basic_auth_and_parses_orders(monkeypatch):
     captured = {}
 
     class Response:
-        headers = {"X-WP-TotalPages": "3"}
+        headers = {"X-Wp-Totalpages": "3"}
 
         def __enter__(self):
             return self
@@ -102,6 +102,20 @@ def test_client_uses_basic_auth_and_parses_orders(monkeypatch):
     expected = base64.b64encode(b"ck_test:cs_test").decode()
     assert captured["request"].get_header("Authorization") == f"Basic {expected}"
     assert "ck_test" not in captured["request"].full_url
+
+
+def test_client_continues_when_full_page_has_no_pagination_header(monkeypatch):
+    client = WooCommerceClient("https://shop.example", "ck_test", "cs_test")
+    full_page = [
+        woo_order(id=index, number=str(index)).model_dump(mode="json") for index in range(100)
+    ]
+    responses = [(full_page, {}), ([], {})]
+    monkeypatch.setattr(client, "_get", lambda *_args: responses.pop(0))
+
+    orders = list(client.iter_orders())
+
+    assert len(orders) == 100
+    assert responses == []
 
 
 def test_import_maps_to_existing_order_and_is_idempotent(session):
@@ -161,7 +175,7 @@ def test_import_leaves_unknown_product_visible(session):
     assert item.link_status == "unmatched"
 
 
-def test_background_sync_uses_and_advances_persistent_cursor(session, monkeypatch):
+def test_background_sync_always_uses_rolling_lookback(session, monkeypatch):
     requested_after = []
 
     class BackgroundClient:
@@ -179,17 +193,13 @@ def test_background_sync_uses_and_advances_persistent_cursor(session, monkeypatc
         woo_secret="cs_test",
     )
     first_run = datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
-    second_run = datetime(2026, 8, 21, 12, 5, tzinfo=UTC)
+    second_run = datetime(2026, 8, 21, 12, 30, tzinfo=UTC)
 
     assert sync_once(settings, now=first_run, session=session) == (1, 1)
     assert sync_once(settings, now=second_run, session=session) == (1, 1)
 
     assert requested_after == [
-        first_run - INITIAL_LOOKBACK,
-        first_run - SYNC_OVERLAP,
+        first_run - SYNC_LOOKBACK,
+        second_run - SYNC_LOOKBACK,
     ]
-    state = session.get(IntegrationSyncState, "woocommerce_orders")
-    assert state is not None
-    assert state.cursor_at.replace(tzinfo=UTC) == second_run
-    assert state.last_imported == 1
-    assert state.last_unmatched == 1
+    assert SYNC_INTERVAL_SECONDS == 30 * 60

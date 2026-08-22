@@ -125,8 +125,14 @@ class WooCommerceClient:
             orders = [WooOrder.model_validate(item) for item in payload]
         except ValidationError as error:
             raise WooCommerceError("WooCommerce returned an invalid order") from error
+        normalized_headers = {key.casefold(): value for key, value in headers.items()}
+        raw_total_pages = normalized_headers.get("x-wp-totalpages")
         try:
-            total_pages = int(headers.get("X-WP-TotalPages", "1"))
+            total_pages = (
+                int(raw_total_pages)
+                if raw_total_pages is not None
+                else page + int(len(orders) == per_page)
+            )
         except ValueError as error:
             raise WooCommerceError("WooCommerce returned invalid pagination headers") from error
         return orders, max(total_pages, 1)
